@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted, nextTick, watch, computed } from 'vue'
+import { ref, onMounted, onUnmounted, nextTick, watch } from 'vue'
 import AuthOverlay from './components/AuthOverlay.vue'
 import UserProfile from './components/UserProfile.vue'
 import BasicsCard from './components/BasicsCard.vue'
@@ -11,17 +11,14 @@ import KnowledgeCard from './components/KnowledgeCard.vue'
 // --- 基础状态 ---
 const authMode = ref('locked')
 const showOverlay = ref(true)
-const currentTab = ref('basics') // 内部 ID 保持 'basics'，界面显示为 'Library'
+const currentTab = ref('basics') // 'basics' = Library, 'cases' = Cases
 const navIndicatorStyle = ref({ width: '0px', left: '0px' })
 const isJelly = ref(false)
 const isDark = ref(false)
-// [新增] 动画起始位置数据
-const cardOriginRect = ref(null)
 
-
-// --- 响应式布局状态 [新增] ---
-const cardWidth = ref(700) // 默认桌面宽度
-const cardGap = ref(60)    // 默认间距
+// --- 动画起始位置数据 (FLIP 核心) ---
+const cardOriginRect = ref(null)      // 用于 Library -> Knowledge
+const caseModalOriginRect = ref(null) // 用于 CaseCard/+ -> CaseModal
 
 // --- 核心数据源 ---
 const knowledgeItems = ref([
@@ -32,21 +29,15 @@ const knowledgeItems = ref([
   { title: 'Shell', img: '/img/shell.png' },
   { title: 'Python', img: '/img/python.png' },
   { title: 'Docker', img: '/img/docker.png' },
-  { title: 'ITIL', img: '/img/people.png' },
+  { title: 'ITIL', img: '/img/people.png' }
 ])
 
 const casesData = ref([
-  { 
-    id: 1, 
-    title: 'Server Down', 
-    category: 'Linux', 
-    priority: 'High', 
-    description: 'Main production server is not responding.', 
-    resolution: 'Rebooted instance via AWS console.',
-    created_at: '2026/1/24 10:00:00' 
-  },
+  { id: 1, title: 'Server Down', category: 'Linux', priority: 'High', description: 'Main production server is not responding.', resolution: 'Rebooted instance via AWS console.', created_at: '2026/1/24 10:00:00' },
   { id: 2, title: 'SQL Injection', category: 'MySQL', priority: 'Medium', description: 'Login form vulnerability found.', resolution: 'Applied prepared statements.', created_at: '2026/1/23 14:30:00' },
-  { id: 3, title: 'Vue Bug', category: 'Vue', priority: 'Low', description: 'Router not redirecting on mobile.', resolution: '', created_at: '2026/1/20 09:15:00' }
+  { id: 3, title: 'Vue Bug', category: 'Vue', priority: 'Low', description: 'Router not redirecting on mobile.', resolution: '', created_at: '2026/1/20 09:15:00' },
+  { id: 4, title: 'API Timeout', category: 'Node.js', priority: 'High', description: 'Legacy API endpoints are timing out under load.', resolution: '', created_at: '2026/1/25 11:20:00' },
+  { id: 5, title: 'CSS Layout', category: 'Vue', priority: 'Low', description: 'Footer misalignment on Safari.', resolution: 'Fixed flexbox gap.', created_at: '2026/1/26 15:00:00' }
 ])
 
 const showCaseModal = ref(false)
@@ -92,116 +83,105 @@ const updateNavIndicator = () => {
   }
 }
 
-// --- [修改] 响应式布局计算 ---
-const updateLayout = () => {
-  const w = window.innerWidth
-  if (w < 768) {
-    // 手机端：卡片宽度占屏幕 85%，间距 20px
-    cardWidth.value = w * 0.85
-    cardGap.value = 20
-  } else {
-    // 桌面端：固定 700px，间距 60px
-    cardWidth.value = 700
-    cardGap.value = 60
-  }
-  // 重新计算导航条位置
-  updateNavIndicator()
-}
+// --- 弹窗触发逻辑 (带坐标捕获) ---
 
-// --- [修改] 轨道偏移计算 ---
-const getTrackStyle = () => {
-  // 动态使用 cardWidth 进行计算，确保居中
-  // 偏移量 = 屏幕中心 - 卡片一半 - (当前卡片索引 * (卡宽 + 间距))
-  // 这里 Tab 0 是 Basics, Tab 1 是 Cases
-  const tabIndex = currentTab.value === 'basics' ? 0 : 1
-  
-  // 基础偏移：让第一个卡片居中
-  const centerOffset = `calc(50vw - ${cardWidth.value / 2}px)`
-  
-  // 移动距离：根据当前 Tab 移动 N 个卡片位
-  const moveDistance = `${tabIndex * (cardWidth.value + cardGap.value)}px`
-  
-  return { transform: `translateX(calc(${centerOffset} - ${moveDistance}))` }
-}
-
-// --- 交互逻辑 ---
-// [修改] 接收 payload 对象
+// 打开知识库卡片
 const openKnowledgeCard = ({ item, rect }) => {
   currentKnowledgeItem.value = item
-  // 保存点击元素的位置
-  cardOriginRect.value = rect
+  cardOriginRect.value = rect // 保存图标位置用于动画
   showKnowledge.value = true
 }
 
-const switchKnowledgeItem = (newItem) => {
-  currentKnowledgeItem.value = newItem
+const switchKnowledgeItem = (newItem) => { currentKnowledgeItem.value = newItem }
+
+// 打开新建工单
+const openCreateModal = (event) => {
+  // 捕获点击 '+' 按钮的位置
+  if (event && event.currentTarget) {
+    caseModalOriginRect.value = event.currentTarget.getBoundingClientRect()
+  }
+  modalMode.value = 'create'
+  currentCase.value = null
+  showCaseModal.value = true
 }
 
-// Cases 逻辑
-const openCreateModal = () => { modalMode.value = 'create'; currentCase.value = null; showCaseModal.value = true }
-const openViewModal = (item) => { modalMode.value = 'view'; currentCase.value = item; showCaseModal.value = true }
-const handleCreateSubmit = (newItem) => { const newId = casesData.value.length + 1; casesData.value.unshift({ ...newItem, id: newId }); showCaseModal.value = false }
-const handleUpdateSubmit = (updatedItem) => { const index = casesData.value.findIndex(c => c.id === updatedItem.id); if (index !== -1) casesData.value[index] = updatedItem; showCaseModal.value = false }
-const handleDeleteCase = (id) => { casesData.value = casesData.value.filter(c => c.id !== id); showCaseModal.value = false }
+// 打开查看工单
+const openViewModal = ({ item, rect }) => {
+  // 接收 CasesCard 传来的卡片位置
+  caseModalOriginRect.value = rect
+  modalMode.value = 'view'
+  currentCase.value = item
+  showCaseModal.value = true
+}
+
+// 工单操作处理
+const handleCreateSubmit = (newItem) => { 
+  const newId = Date.now()
+  casesData.value.unshift({ ...newItem, id: newId })
+  showCaseModal.value = false 
+}
+const handleUpdateSubmit = (updatedItem) => { 
+ const index = casesData.value.findIndex(c => c.id === updatedItem.id)
+  if (index !== -1) casesData.value[index] = updatedItem
+}
+const handleDeleteCase = (id) => { 
+  casesData.value = casesData.value.filter(c => c.id !== id)
+  showCaseModal.value = false 
+}
 const handleAction = (action) => { if (action === 'switch-case') switchTab('cases') }
 
+// 左右手势滑动
 const startX = ref(0)
 const onPointerDown = (e) => { startX.value = e.clientX }
 const onPointerUp = (e) => {
   const diff = e.clientX - startX.value
-  if (diff < -50) switchTab('cases') 
-  if (diff > 50) switchTab('basics') 
+  if (diff < -80) switchTab('cases') 
+  if (diff > 80) switchTab('basics') 
 }
 
 onMounted(() => {
-  updateLayout() // 初始化布局参数
   nextTick(() => updateNavIndicator())
-  window.addEventListener('resize', () => {
-    updateLayout()
-  })
+  window.addEventListener('resize', updateNavIndicator)
 })
-
 onUnmounted(() => {
-  window.removeEventListener('resize', updateLayout)
+  window.removeEventListener('resize', updateNavIndicator)
 })
 </script>
 
 <template>
   <div class="ambient-light"></div>
   <div class="ambient-light-2"></div>
+
   <AuthOverlay :class="{ hidden: !showOverlay }" @unlock="handleUnlock" />
+  
   <div class="header-bar">
     <UserProfile :mode="authMode" />
     <ThemeToggle :isDark="isDark" @toggle="toggleTheme" />
   </div>
 
   <div class="page-mask" @pointerdown="onPointerDown" @pointerup="onPointerUp">
-    <div class="page-track" :style="[getTrackStyle(), { gap: cardGap + 'px' }]">
+    <div class="page-track" :style="{ transform: currentTab === 'basics' ? 'translateX(0)' : 'translateX(-100vw)' }">
       
-     <div 
-        class="page-section" 
-        :class="{ inactive: currentTab !== 'basics' }"
-        :style="{ width: cardWidth + 'px' }"
-      >
-        <BasicsCard 
-          :items="knowledgeItems"
-          @action="handleAction" 
-          @open-knowledge="openKnowledgeCard" 
-        />
+      <div class="page-section">
+        <div class="section-container">
+          <BasicsCard 
+            :items="knowledgeItems"
+            @action="handleAction" 
+            @open-knowledge="openKnowledgeCard" 
+          />
+        </div>
       </div>
 
-      <div 
-        class="page-section" 
-        :class="{ inactive: currentTab !== 'cases' }"
-        :style="{ width: cardWidth + 'px' }"
-      >
-        <CasesCard 
-          :cases="casesData" 
-          :isAdmin="authMode === 'admin'"
-          @create="openCreateModal"
-          @view="openViewModal"
-        />
+      <div class="page-section">
+        <div class="section-container">
+          <CasesCard 
+            :cases="casesData" 
+            :isAdmin="authMode === 'admin'"
+            @view="openViewModal"
+          />
+        </div>
       </div>
+
     </div>
   </div>
 
@@ -212,9 +192,10 @@ onUnmounted(() => {
   </nav>
 
   <div 
+    v-if="authMode === 'admin'"
     class="fab-add" 
-    :style="{ display: authMode === 'admin' ? 'flex' : 'none' }"
-    @click="openCreateModal"
+    :class="{ 'fab-hidden': currentTab !== 'cases' }"
+    @click="(e) => openCreateModal(e)"
   >+</div>
 
   <CaseModal 
@@ -222,13 +203,14 @@ onUnmounted(() => {
     :mode="modalMode"
     :caseData="currentCase"
     :isAdmin="authMode === 'admin'"
+    :originRect="caseModalOriginRect"
     @close="showCaseModal = false"
     @submit="handleCreateSubmit"
     @update="handleUpdateSubmit"
     @delete="handleDeleteCase"
   />
 
- <KnowledgeCard 
+  <KnowledgeCard 
     :visible="showKnowledge"
     :data="currentKnowledgeItem"
     :allItems="knowledgeItems"
@@ -237,32 +219,84 @@ onUnmounted(() => {
     @close="showKnowledge = false"
     @switch="switchKnowledgeItem"
   />
-
 </template>
 
-<style>
-/* 确保 CSS 中的样式也能适配 JS 计算的宽度 */
+<style scoped>
+/* --- 全屏滑轨布局样式 --- */
+.page-mask {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+  z-index: 10;
+}
+
 .page-track {
   display: flex;
+  width: 200vw; /* 两倍视口宽度 */
   height: 100%;
-  align-items: center;
-  transition: transform 0.5s cubic-bezier(0.32, 0.725, 0, 1);
-  /* gap 由内联样式控制 */
+  /* 使用 iOS 风格的弹性曲线 */
+  transition: transform 0.6s cubic-bezier(0.32, 0.725, 0, 1);
 }
 
 .page-section {
-  height: 80vh; /* 或根据需要调整 */
+  width: 100vw;
+  height: 100%;
   flex-shrink: 0;
-  transition: opacity 0.4s, transform 0.4s;
-  /* width 由内联样式控制 */
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding-top: 80px; /* 避开头部 */
+  padding-bottom: 90px; /* 避开底部导航 */
 }
 
-/* 手机端适配补充 */
+.section-container {
+  width: 95%; /* 容器宽最大化 */
+  max-width: 1400px;
+  height: 100%;
+  position: relative;
+}
+
+/* --- 悬浮按钮 (FAB) 增强 --- */
+.fab-add {
+  position: fixed;
+  right: 30px;
+  bottom: 120px;
+  width: 56px;
+  height: 56px;
+  background: var(--ios-blue);
+  color: white;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.4);
+  z-index: 100;
+  transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.fab-add:hover {
+  transform: scale(1.1) rotate(90deg);
+  box-shadow: 0 12px 32px rgba(0, 122, 255, 0.5);
+}
+.fab-hidden {
+  transform: scale(0) rotate(-180deg);
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* 手机适配 */
 @media (max-width: 768px) {
-  /* 强制覆盖子组件可能写死的宽度 */
-  .glass-card {
-    width: 100% !important; 
-    max-width: none !important;
+  .section-container {
+    width: 100%;
+    padding: 0 10px;
+  }
+  .fab-add {
+    right: 20px;
+    bottom: 100px;
+    width: 50px;
+    height: 50px;
   }
 }
 </style>
