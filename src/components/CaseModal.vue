@@ -5,12 +5,13 @@ const props = defineProps({
   visible: Boolean,
   mode: String,
   caseData: Object,
-  isAdmin: Boolean
+  isAdmin: Boolean,
+  originRect: Object
 })
 
 const emit = defineEmits(['close', 'submit', 'update', 'delete'])
 
-// 1. 基础状态定义
+// 1. 基础状态
 const form = ref({
   title: '',
   category: 'Linux',
@@ -23,8 +24,9 @@ const isEditing = ref(false)
 const isShaking = ref(false)
 const titleWarning = ref(false)
 const showDeleteConfirm = ref(false)
+const showAnimation = ref(false)
 
-// --- 核心修复：函数定义必须在 watch 调用之前，防止初始化报错 ---
+// --- 重置表单 ---
 const resetForm = () => {
   form.value = { 
     title: '', 
@@ -38,30 +40,35 @@ const resetForm = () => {
   isShaking.value = false
 }
 
-// 2. 监听器逻辑
+// 2. 监听器
 watch(() => props.visible, (val) => {
-  if (!val) {
+  if (val) {
+    showAnimation.value = false
+    setTimeout(() => { showAnimation.value = true }, 50)
+
+    if (props.mode === 'create') {
+      resetForm()
+      isEditing.value = true
+    } else if (props.caseData) {
+      form.value = { ...props.caseData }
+      isEditing.value = false
+    }
+  } else {
+    showAnimation.value = false
     titleWarning.value = false
     isShaking.value = false
     showDeleteConfirm.value = false
-    if (props.mode === 'create') resetForm()
   }
 })
-
-watch(() => props.caseData, (newVal) => {
-  if (newVal) {
-    form.value = { ...newVal }
-  } else {
-    resetForm() // 此时 resetForm 已定义，安全调用
-  }
-}, { immediate: true })
 
 watch(() => props.mode, (newMode) => {
-  isEditing.value = newMode === 'create'
-  if (newMode === 'create') resetForm()
+  if (props.visible) {
+    isEditing.value = newMode === 'create'
+    if (newMode === 'create') resetForm()
+  }
 })
 
-// 3. 交互逻辑函数
+// 3. 交互逻辑
 const triggerShake = () => {
   isShaking.value = true
   setTimeout(() => { isShaking.value = false }, 500)
@@ -85,7 +92,7 @@ const toggleEdit = () => { isEditing.value = true }
 
 const cancelEdit = () => {
   isEditing.value = false
-  form.value = { ...props.caseData }
+  if (props.caseData) form.value = { ...props.caseData }
   titleWarning.value = false
 }
 
@@ -101,22 +108,8 @@ const confirmDelete = () => {
 
 const cancelDelete = () => { showDeleteConfirm.value = false }
 
-// --- 下载 Markdown 功能 ---
 const handleDownload = () => {
-  const mdContent = `
-# Case: ${form.value.title}
-
-**Category:** ${form.value.category}
-**Priority:** ${form.value.priority}
-**Created At:** ${form.value.created_at || new Date().toLocaleString()}
-
-## Description
-${form.value.description || 'No description.'}
-
-## Resolution
-${form.value.resolution || 'No resolution provided.'}
-  `.trim()
-
+  const mdContent = `# Case: ${form.value.title}\n\n**Category:** ${form.value.category}\n**Priority:** ${form.value.priority}\n**Created At:** ${form.value.created_at || new Date().toLocaleString()}\n\n## Description\n${form.value.description || 'No description.'}\n\n## Resolution\n${form.value.resolution || 'No resolution provided.'}`
   const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' })
   const link = document.createElement('a')
   link.href = URL.createObjectURL(blob)
@@ -128,15 +121,16 @@ ${form.value.resolution || 'No resolution provided.'}
 
 <template>
   <div class="case-modal-overlay" :class="{ visible: visible }">
-    <div class="glass-card modal-card" :class="{ shake: isShaking }">
+    
+    <div class="glass-card modal-card" :class="{ shake: isShaking, 'animate-drop': showAnimation }">
       
-      <div class="modal-header">
+      <div class="modal-header drop-item" style="--delay: 0s">
         <h2>{{ mode === 'create' ? 'New Case' : (isEditing ? 'Edit Case' : 'Case Detail') }}</h2>
         <span class="status-badge" :class="form.priority.toLowerCase()">{{ form.priority }}</span>
       </div>
 
       <div class="modal-body">
-        <div class="form-group">
+        <div class="form-group drop-item" style="--delay: 0.1s">
           <label>Title <span style="color: #ff3b30" v-if="titleWarning">* Required</span></label>
           <input 
             type="text" class="modal-input" :class="{ 'input-warning': titleWarning }"
@@ -144,7 +138,7 @@ ${form.value.resolution || 'No resolution provided.'}
           >
         </div>
 
-        <div class="form-row">
+        <div class="form-row drop-item" style="--delay: 0.2s">
           <div class="form-group">
             <label>Category</label>
             <select class="modal-input" v-model="form.category" :disabled="!isEditing">
@@ -159,7 +153,7 @@ ${form.value.resolution || 'No resolution provided.'}
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group drop-item" style="--delay: 0.3s">
           <label>Description</label>
           <textarea 
             v-if="isEditing" class="modal-input textarea" 
@@ -170,7 +164,7 @@ ${form.value.resolution || 'No resolution provided.'}
           </div>
         </div>
 
-        <div class="form-group">
+        <div class="form-group drop-item" style="--delay: 0.4s">
           <label>Resolution</label>
           <textarea 
             v-if="isEditing" class="modal-input textarea" 
@@ -181,12 +175,12 @@ ${form.value.resolution || 'No resolution provided.'}
           </div>
         </div>
         
-        <div class="meta-info" v-if="mode === 'view'">
+        <div class="meta-info drop-item" style="--delay: 0.5s" v-if="mode === 'view'">
           Created at: {{ form.created_at }}
         </div>
       </div>
 
-      <div class="modal-footer">
+      <div class="modal-footer drop-item" style="--delay: 0.5s">
         <template v-if="mode === 'create'">
           <button class="btn-secondary" @click="$emit('close')">Cancel</button>
           <button class="btn-primary" @click="handleSubmit">Submit Ticket</button>
@@ -201,7 +195,6 @@ ${form.value.resolution || 'No resolution provided.'}
               <button class="btn-primary" @click="toggleEdit">Modify</button>
             </div>
           </template>
-
           <template v-else>
              <div style="width: 100%; display: flex; justify-content: space-between;">
                <button class="btn-secondary" @click="$emit('close')">Exit</button>
@@ -239,12 +232,19 @@ ${form.value.resolution || 'No resolution provided.'}
   width: 600px; max-width: 90vw;
   height: 92vh; 
   padding: 40px;
-  transform: scale(0.95); opacity: 0;
-  transition: all 0.4s cubic-bezier(0.32, 0.725, 0, 1);
+  margin-left: auto; margin-right: auto;
+  
+  transform: scale(0.98) translateY(10px); 
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.3s ease;
   position: relative; overflow: hidden;
   display: flex; flex-direction: column;
 }
-.case-modal-overlay.visible .modal-card { transform: scale(1); opacity: 1; }
+
+.case-modal-overlay.visible .modal-card { 
+  transform: scale(1) translateY(0); 
+  opacity: 1; 
+}
 
 .case-modal-overlay {
   position: fixed; top: 0; left: 0; width: 100%; height: 100%;
@@ -255,8 +255,13 @@ ${form.value.resolution || 'No resolution provided.'}
 }
 .case-modal-overlay.visible { opacity: 1; pointer-events: auto; }
 
-/* 2. 内容区域滚动 */
-.modal-header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+/* 掉落动画 */
+.drop-item { opacity: 0; transform: translateY(-20px); transition: none; }
+.modal-card.animate-drop .drop-item { animation: dropIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: var(--delay); }
+@keyframes dropIn { from { opacity: 0; transform: translateY(-25px); } to { opacity: 1; transform: translateY(0); } }
+
+/* 2. 内容区域 */
+.modal-header { flex-shrink: 0; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; position: relative; }
 .modal-header h2 { font-size: 1.8rem; font-weight: 700; color: var(--text-main); }
 
 .modal-body { 
@@ -287,59 +292,67 @@ ${form.value.resolution || 'No resolution provided.'}
 
 .textarea { min-height: 120px; line-height: 1.5; resize: vertical; }
 
-.read-only-content {
-  min-height: 60px; height: auto;
-  white-space: pre-wrap; line-height: 1.6;
-  color: var(--text-main); padding: 12px 16px;
-}
-
+.read-only-content { min-height: 60px; height: auto; white-space: pre-wrap; line-height: 1.6; color: var(--text-main); padding: 12px 16px; }
 .meta-info { font-size: 0.85rem; color: var(--text-sec); text-align: right; margin-top: 10px; }
 
 /* 4. 按钮风格 */
 .right-actions { display: flex; gap: 12px; }
-
-.btn-primary { 
-  background: #007aff; color: #fff; border: none; 
-  padding: 10px 24px; border-radius: 20px; font-weight: 600; 
-  cursor: pointer; transition: transform 0.2s; 
-}
+.btn-primary { background: #007aff; color: #fff; border: none; padding: 10px 24px; border-radius: 20px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
 .btn-primary:hover { transform: scale(1.05); }
-
-.btn-secondary {
-  background: rgba(120, 120, 128, 0.12); color: var(--text-main); border: none;
-  padding: 10px 24px; border-radius: 20px; font-weight: 600; 
-  cursor: pointer; transition: all 0.2s;
-}
+.btn-secondary { background: rgba(120, 120, 128, 0.12); color: var(--text-main); border: none; padding: 10px 24px; border-radius: 20px; font-weight: 600; cursor: pointer; transition: all 0.2s; }
 .btn-secondary:hover { background: rgba(120, 120, 128, 0.2); transform: scale(1.05); }
-
-.btn-danger { 
-  background: #ff3b30; color: #fff; border: none; 
-  padding: 10px 24px; border-radius: 20px; font-weight: 600; 
-  cursor: pointer; transition: transform 0.2s; 
-}
+.btn-danger { background: #ff3b30; color: #fff; border: none; padding: 10px 24px; border-radius: 20px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
 .btn-danger:hover { transform: scale(1.05); background: #ff1f1f; }
 
 /* 5. 状态与动画 */
+.status-badge { padding: 4px 12px; border-radius: 8px; font-size: 0.8rem; font-weight: 700; text-transform: uppercase; margin-right: 10px; }
 .status-badge.high { color: #ff3b30; background: rgba(255, 59, 48, 0.1); }
 .status-badge.medium { color: #ff9500; background: rgba(255, 149, 0, 0.1); }
 .status-badge.low { color: #34c759; background: rgba(52, 199, 89, 0.1); }
-
 .shake { animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both; }
+@keyframes shake { 10%, 90% { transform: translate3d(-1px, 0, 0); } 20%, 80% { transform: translate3d(2px, 0, 0); } 30%, 50%, 70% { transform: translate3d(-4px, 0, 0); } 40%, 60% { transform: translate3d(4px, 0, 0); } }
 
-/* 6. 删除确认层 */
-.delete-confirm-overlay {
-  position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-  background: var(--glass-bg, rgba(255, 255, 255, 0.85)); 
-  backdrop-filter: blur(10px);
-  z-index: 10; display: flex; align-items: center; justify-content: center;
-  border-radius: 35px; color: var(--text-main);
-}
+/* 6. 删除确认 */
+.delete-confirm-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--glass-bg, rgba(255, 255, 255, 0.85)); backdrop-filter: blur(10px); z-index: 10; display: flex; align-items: center; justify-content: center; border-radius: 35px; color: var(--text-main); }
 .confirm-box { text-align: center; animation: popIn 0.3s; }
 .confirm-box h3 { font-size: 1.5rem; margin-bottom: 8px; }
 .confirm-box p { color: var(--text-sec); margin-bottom: 24px; }
 .confirm-actions { display: flex; gap: 16px; justify-content: center; }
-
 @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+
+/* --- [重要] 手机端适配 --- */
+@media (max-width: 768px) {
+  .modal-card {
+    /* 强制全屏 */
+    width: 100% !important; height: 100% !important;
+    max-width: none !important; max-height: none !important;
+    margin: 0 !important; border-radius: 0 !important;
+    position: fixed; top: 0; left: 0;
+  }
+  .modal-body {
+    padding: 20px !important;
+    height: calc(100% - 130px); /* 留出底部操作栏位置 */
+  }
+  /* 表单行在手机上垂直排列，不挤压 */
+  .form-row { flex-direction: column; gap: 16px; }
+  
+  .form-group { margin-bottom: 16px; }
+  
+  /* 底部固定，按钮更大 */
+  .modal-footer {
+    padding: 16px 20px !important;
+    position: absolute; bottom: 0; width: 100%;
+    background: var(--glass-bg, rgba(255, 255, 255, 0.95));
+    border-top: 1px solid rgba(0,0,0,0.05);
+    display: flex; gap: 12px;
+  }
+  .right-actions { flex: 1; justify-content: flex-end; }
+  .btn-primary, .btn-secondary, .btn-danger {
+    padding: 12px 16px !important;
+    font-size: 15px !important;
+    flex: 1; text-align: center;
+  }
+}
 </style>
