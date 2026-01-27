@@ -3,10 +3,10 @@ import { ref, watch, nextTick, computed, onMounted, onUnmounted } from 'vue'
 
 const props = defineProps({
   visible: Boolean,
-  data: Object,
+  data: Object, 
   allItems: { type: Array, default: () => [] },
   isAdmin: Boolean,
-  originRect: Object // [新增] 接收起始位置
+  originRect: Object
 })
 
 const emit = defineEmits(['close', 'switch'])
@@ -21,17 +21,17 @@ const isModifyMode = ref(false)
 const searchQuery = ref('')
 const isSearching = ref(false)
 const highlightedNoteId = ref(null)
-const startX = ref(0)
-const isDragging = ref(false)
 
-// 响应式布局
+// [修改] 增加 startY 用于检测纵向滑动
+const startX = ref(0)
+const startY = ref(0)
+const isDragging = ref(false)
+const ignoreClick = ref(false)
+
 const cardWidth = ref(900)
 const cardGap = ref(40)
-
-// [新增] 动画相关状态
-const isAnimating = ref(false) // 是否正在执行打开动画
-const activeCardRef = ref(null) // 用于直接操作 DOM
-const contentOpacity = ref(1) // 控制内容淡入
+const isAnimating = ref(false)
+const contentOpacity = ref(1)
 
 // --- 计算属性 ---
 const currentIndex = computed(() => {
@@ -59,101 +59,60 @@ const filteredResults = computed(() => {
   return results
 })
 
-// --- FLIP 动画核心逻辑 ---
+const handleCardClick = (item) => {
+  if (ignoreClick.value || item.title === props.data?.title) return
+  emit('switch', item)
+}
+
+// --- FLIP 动画 ---
 const performEnterAnimation = async () => {
   if (!props.originRect) return
-
-  // 1. 准备阶段
   isAnimating.value = true
-  contentOpacity.value = 0 // 先隐藏内容，只展示卡片外壳变形
-  
-  await nextTick() // 等待 DOM 渲染
-  
-  // 找到当前激活的卡片 DOM (需要给卡片加 ref)
-  // 由于 v-for，我们需要通过 document 查询或 ref 数组。这里用简单查询
+  contentOpacity.value = 0
+  await nextTick()
   const activeCard = document.querySelector('.card-wrapper.active .knowledge-card')
   if (!activeCard) return
-
-  // 2. 计算位置差异 (Last)
   const targetRect = activeCard.getBoundingClientRect()
-  
   const scaleX = props.originRect.width / targetRect.width
   const scaleY = props.originRect.height / targetRect.height
   const translateX = props.originRect.left - targetRect.left + (props.originRect.width - targetRect.width) / 2
   const translateY = props.originRect.top - targetRect.top + (props.originRect.height - targetRect.height) / 2
-
-  // 3. 应用初始状态 (First & Invert)
-  // 我们操作 card-wrapper 的 transform
   const wrapper = activeCard.parentElement
   wrapper.style.transition = 'none'
   wrapper.style.transform = `translate(${translateX}px, ${translateY}px) scale(${scaleX}, ${scaleY})`
-  // 修正圆角：缩小的时候圆角看起来会很大，反向补偿一下(可选)
   activeCard.style.borderRadius = `${24 / Math.min(scaleX, scaleY)}px`
-
-  // 4. 强制重绘
   wrapper.offsetHeight 
-
-  // 5. 执行动画 (Play)
   requestAnimationFrame(() => {
-    wrapper.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)' // 有弹性的动画
-    wrapper.style.transform = '' // 清除 transform，回归原位 (scale(1))
+    wrapper.style.transition = 'transform 0.5s cubic-bezier(0.34, 1.56, 0.64, 1)'
+    wrapper.style.transform = ''
     activeCard.style.transition = 'border-radius 0.5s'
-    activeCard.style.borderRadius = '24px' // 恢复圆角
-
-    // 动画结束后
-    setTimeout(() => {
-      isAnimating.value = false
-      contentOpacity.value = 1 // 内容淡入
-    }, 400)
+    activeCard.style.borderRadius = '24px'
+    setTimeout(() => { isAnimating.value = false; contentOpacity.value = 1 }, 400)
   })
 }
 
-// --- 数据与监听 ---
+// --- 数据管理 ---
 const getStorageKey = (title) => `knowledge_notes_${title}`
-
 const loadAllNotes = () => {
   props.allItems.forEach(item => {
     const key = getStorageKey(item.title)
     const saved = localStorage.getItem(key)
-    if (saved) {
-      try { notesCache.value[item.title] = JSON.parse(saved) } catch (e) { notesCache.value[item.title] = [] }
-    } else {
-      notesCache.value[item.title] = [{ id: Date.now(), content: `Key concepts about ${item.title}...` }]
-    }
+    if (saved) { try { notesCache.value[item.title] = JSON.parse(saved) } catch (e) { notesCache.value[item.title] = [] } } 
+    else { notesCache.value[item.title] = [{ id: Date.now(), content: `Key concepts about ${item.title}...` }] }
   })
 }
-
-const saveNotes = (title) => {
-  const key = getStorageKey(title)
-  if (notesCache.value[title]) localStorage.setItem(key, JSON.stringify(notesCache.value[title]))
-}
+const saveNotes = (title) => { const key = getStorageKey(title); if (notesCache.value[title]) localStorage.setItem(key, JSON.stringify(notesCache.value[title])) }
 const getCurrentNotes = (title) => notesCache.value[title] || []
-
-const updateLayout = () => {
-  const w = window.innerWidth
-  if (w < 768) { cardWidth.value = w * 0.92; cardGap.value = 16 } 
-  else { cardWidth.value = 900; cardGap.value = 40 }
-}
-
+const updateLayout = () => { const w = window.innerWidth; if (w < 768) { cardWidth.value = w * 0.92; cardGap.value = 16 } else { cardWidth.value = 900; cardGap.value = 40 } }
 onMounted(() => { updateLayout(); window.addEventListener('resize', updateLayout) })
 onUnmounted(() => { window.removeEventListener('resize', updateLayout) })
-
 watch(() => props.visible, (val) => {
   if (val) {
-    isAdding.value = false; newContent.value = ''; editingNoteId.value = null; 
-    isModifyMode.value = false; searchQuery.value = ''; isSearching.value = false; highlightedNoteId.value = null;
-    loadAllNotes()
-    updateLayout()
-    // [触发动画]
-    performEnterAnimation()
-  } else {
-    // 关闭时重置
-    contentOpacity.value = 1
-  }
+    isAdding.value = false; newContent.value = ''; editingNoteId.value = null; isModifyMode.value = false; searchQuery.value = ''; isSearching.value = false; highlightedNoteId.value = null;
+    loadAllNotes(); updateLayout(); performEnterAnimation()
+  } else { contentOpacity.value = 1 }
 })
-// ... (watch data, etc. 保持不变) ...
 
-// --- CRUD 操作 (保持不变) ---
 const activeTitle = computed(() => props.data?.title)
 const startAdd = () => { if (!activeTitle.value) return; cancelEdit(); isAdding.value = true; nextTick(() => { scrollToBottom(); const t = document.querySelector('#new-note-textarea'); if(t) t.focus(); }) }
 const confirmInput = () => { if (!newContent.value.trim() || !activeTitle.value) return; if (!notesCache.value[activeTitle.value]) notesCache.value[activeTitle.value] = []; notesCache.value[activeTitle.value].push({ id: Date.now(), content: newContent.value }); saveNotes(activeTitle.value); newContent.value = ''; isAdding.value = false; nextTick(scrollToBottom); }
@@ -169,14 +128,71 @@ const scrollToBottom = () => { const ac = document.querySelector('.card-wrapper.
 const autoResize = (e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }
 const formatIndex = (i) => (i + 1).toString().padStart(2, '0')
 
-const onTouchStart = (e) => { if (e.target.tagName.toLowerCase() === 'textarea' || e.target.closest('button') || e.target.closest('.global-search-container')) return; startX.value = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; isDragging.value = true }
+// --- [核心修复] 滑动与点击交互 ---
+const onTouchStart = (e) => {
+  if (e.target.tagName.toLowerCase() === 'textarea' || e.target.closest('button') || e.target.closest('.global-search-container')) return
+  
+  // 记录初始 X 和 Y
+  if (e.changedTouches) {
+    startX.value = e.changedTouches[0].clientX
+    startY.value = e.changedTouches[0].clientY
+  } else {
+    startX.value = e.clientX
+    startY.value = e.clientY
+  }
+  isDragging.value = true
+}
+
 const onTouchEnd = (e) => {
-  if (!isDragging.value) return; isDragging.value = false; const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; const diff = endX - startX.value;
-  if (!isSearching.value && Math.abs(diff) > 50) { if (diff < 0) switchItem('next'); else switchItem('prev') } else {
-    const isClickOnCard = e.target.closest('.knowledge-card'); const isClickOnSearch = e.target.closest('.global-search-container'); const isClickOnResults = e.target.closest('.search-results-list');
-    if (!isClickOnCard && !isClickOnSearch && !isClickOnResults) { if (isSearching.value) { exitSearchMode() } else { if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) { emit('close') } } }
+  if (!isDragging.value) return
+  isDragging.value = false
+  
+  const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX
+  const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY
+  
+  const diffX = endX - startX.value
+  const diffY = endY - startY.value
+  
+  // 判定逻辑：优先判断滑动
+  if (!isSearching.value) {
+    // 1. 横向滑动 (翻页) - 阈值 50，且横向位移大于纵向
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
+      if (diffX < 0) switchItem('next')
+      else switchItem('prev')
+      ignoreClick.value = true
+      setTimeout(() => { ignoreClick.value = false }, 100)
+      return
+    }
+    
+    // 2. [新增] 纵向滑动 (下滑关闭) - 阈值 100，且纵向位移大于横向，且是向下滑
+    if (diffY > 100 && Math.abs(diffY) > Math.abs(diffX)) {
+      // 只有在非编辑模式下允许下滑关闭
+      if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) {
+        emit('close')
+        return
+      }
+    }
+  }
+
+  // 3. 点击判定 (位移很小)
+  if (Math.abs(diffX) < 10 && Math.abs(diffY) < 10) {
+    const isClickOnCard = e.target.closest('.knowledge-card')
+    const isClickOnSearch = e.target.closest('.global-search-container')
+    const isClickOnResults = e.target.closest('.search-results-list')
+
+    // 如果点击的既不是卡片，也不是搜索区域，则认为是点击背景 -> 关闭
+    if (!isClickOnCard && !isClickOnSearch && !isClickOnResults) {
+      if (isSearching.value) {
+        exitSearchMode() 
+      } else {
+        if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) {
+          emit('close')
+        }
+      }
+    }
   }
 }
+
 const switchItem = (direction) => { if (!props.allItems.length) return; let nextIdx; if (direction === 'next') nextIdx = (currentIndex.value + 1) % props.allItems.length; else nextIdx = (currentIndex.value - 1 + props.allItems.length) % props.allItems.length; emit('switch', props.allItems[nextIdx]) }
 </script>
 
@@ -187,18 +203,13 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
     @mousedown="onTouchStart" @mouseup="onTouchEnd"
     @touchstart="onTouchStart" @touchend="onTouchEnd"
   >
-    <div class="global-search-container" 
-      :class="{ 'search-active': isSearching }" 
-      :style="{ opacity: contentOpacity, transition: 'opacity 0.3s' }"
-      @mousedown.stop @touchstart.stop
-    >
+    <div class="global-search-container" :class="{ 'search-active': isSearching }" :style="{ opacity: contentOpacity, transition: 'opacity 0.3s' }" @mousedown.stop @touchstart.stop>
       <div class="search-input-wrapper">
         <span class="search-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
         <input v-model="searchQuery" class="global-search-input" placeholder="Search knowledge..." @focus="enterSearchMode" />
         <button v-if="isSearching" class="close-search-btn" @click="exitSearchMode">{{ searchQuery ? 'Clear' : 'Cancel' }}</button>
       </div>
     </div>
-
     <transition name="fade-up">
       <div class="search-results-layer" v-if="isSearching" @mousedown.stop @touchstart.stop>
         <div class="search-results-list" v-if="searchQuery">
@@ -222,8 +233,7 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
         :style="{ width: cardWidth + 'px' }" 
         :class="{ active: index === currentIndex }"
       >
-        <div class="glass-card knowledge-card" @click.stop>
-          
+        <div class="glass-card knowledge-card" @click.stop="handleCardClick(item)">
           <div class="card-content-wrapper" :style="{ opacity: contentOpacity, transition: 'opacity 0.4s' }">
             <div class="card-header">
               <div class="header-left">
@@ -234,7 +244,6 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
                 <button class="fab-add-note" @click="startAdd" :disabled="isAdding || editingNoteId !== null">+</button>
               </div>
             </div>
-            
             <div class="card-body-container">
               <div class="notes-scroll-area">
                 <div class="notes-list">
@@ -265,7 +274,6 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
                 </div>
               </div>
             </div>
-
             <div class="card-footer">
               <div class="left-actions"></div>
               <div class="right-actions">
@@ -274,20 +282,15 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
               </div>
             </div>
           </div>
-          </div>
+        </div>
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 保持原有所有样式不变 */
-/* 增加 card-content-wrapper 的样式辅助 */
-.card-content-wrapper {
-  display: flex; flex-direction: column; height: 100%; width: 100%;
-}
-
-/* ... (复制并保留之前所有的 CSS 样式) ... */
+/* 保持原有所有样式 */
+.card-content-wrapper { display: flex; flex-direction: column; height: 100%; width: 100%; }
 .knowledge-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: var(--modal-overlay); backdrop-filter: blur(20px); z-index: 2000; opacity: 0; pointer-events: none; transition: opacity 0.4s ease; overflow: hidden; }
 .knowledge-overlay.visible { opacity: 1; pointer-events: auto; }
 .carousel-track { display: flex; align-items: center; height: 100%; padding-left: 0; transition: all 0.5s cubic-bezier(0.32, 0.725, 0, 1); gap: 40px; opacity: 1; transform: scale(1); }
