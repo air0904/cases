@@ -8,20 +8,17 @@ const props = defineProps({
   }
 })
 
-const emit = defineEmits(['open-knowledge', 'action'])
+const emit = defineEmits(['open-knowledge'])
 
-// --- 状态 ---
 const searchQuery = ref('')
 const isSearchFocused = ref(false)
 
-// --- 计算属性：搜索过滤 ---
 const filteredItems = computed(() => {
   if (!searchQuery.value.trim()) return props.items
   const query = searchQuery.value.toLowerCase()
   return props.items.filter(item => item.title.toLowerCase().includes(query))
 })
 
-// 获取点击元素的位置信息（用于 FLIP 动画）
 const handleClick = (item, event) => {
   const target = event.currentTarget
   const rect = target.getBoundingClientRect()
@@ -42,45 +39,36 @@ const handleClick = (item, event) => {
           <span class="search-icon">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
           </span>
-          
           <input 
             v-model="searchQuery" 
-            placeholder="Search topics..." 
+            placeholder="Search..." 
             class="library-search-input"
             @focus="isSearchFocused = true"
             @blur="isSearchFocused = false"
           />
-          
           <button v-show="searchQuery" class="clear-btn" @click="searchQuery = ''">×</button>
         </div>
       </div>
     </div>
 
-    <div class="library-grid-wrapper">
-      
+    <div class="ios-grid-wrapper">
       <div v-if="filteredItems.length === 0" class="empty-state">
         <div class="empty-icon">🔍</div>
-        <p>No topics found.</p>
+        <p>No apps found.</p>
       </div>
 
-      <transition-group name="list" tag="section" class="gallery-grid">
-        <article 
-          class="gallery-item glass-panel" 
+      <transition-group name="app-pop" tag="div" class="ios-grid">
+        <div 
+          class="app-item" 
           v-for="item in filteredItems" 
           :key="item.title"
           @click="(e) => handleClick(item, e)" 
         >
-          <div class="image-wrapper">
+          <div class="icon-container">
             <img :src="item.img" :alt="item.title">
           </div>
-          
-          <div class="item-footer">
-            <h3 class="item-title">{{ item.title }}</h3>
-            <span class="action-icon">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"></line><polyline points="12 5 19 12 12 19"></polyline></svg>
-            </span>
-          </div>
-        </article>
+          <span class="app-title">{{ item.title }}</span>
+        </div>
       </transition-group>
 
     </div>
@@ -88,19 +76,18 @@ const handleClick = (item, event) => {
 </template>
 
 <style scoped>
-/* --- 容器布局 --- */
+/* 容器 */
 .library-container {
   width: 100%; height: 100%;
-  padding: 20px 40px;
+  padding: 30px 40px; /* 增加一点顶部内边距 */
   display: flex; flex-direction: column;
 }
 
-/* --- 顶部栏 --- */
+/* 顶部栏 */
 .section-header {
-  margin-bottom: 30px;
+  margin-bottom: 20px;
   display: flex; justify-content: space-between; align-items: center;
-  gap: 20px;
-  height: 60px;
+  gap: 20px; height: 60px; flex-shrink: 0;
 }
 .header-left { display: flex; align-items: center; }
 .section-title {
@@ -110,157 +97,101 @@ const handleClick = (item, event) => {
   letter-spacing: -0.5px;
 }
 
-/* --- [修复] 搜索框样式 --- */
-.search-container {
-  width: 260px;
-  transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
-}
-.search-container.focused {
-  width: 320px;
-}
-
+/* 搜索框 */
+.search-container { width: 260px; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.search-container.focused { width: 320px; }
 .search-input-wrapper {
-  position: relative; /* 关键：为子元素的绝对定位提供锚点 */
-  width: 100%; height: 50px;
-  background: var(--glass-bg); 
-  backdrop-filter: blur(30px);
-  border: 1px solid var(--glass-border);
-  border-radius: 25px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.05);
-  transition: all 0.3s;
+  position: relative; width: 100%; height: 50px;
+  background: var(--glass-bg); backdrop-filter: blur(30px);
+  border: 1px solid var(--glass-border); border-radius: 25px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: all 0.3s;
 }
-
-.search-container.focused .search-input-wrapper {
-  background: var(--input-bg);
-  border-color: #007aff;
-  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.15);
-}
-
-/* 图标固定在左侧 */
-.search-icon {
-  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-  color: var(--text-sec); opacity: 0.6; pointer-events: none;
-  display: flex; align-items: center;
-}
-
-/* 输入框：通过 padding 避开图标和清除按钮 */
-.library-search-input {
-  width: 100%; height: 100%;
-  background: transparent; border: none; outline: none;
-  font-size: 1rem; color: var(--text-main);
-  padding-left: 44px; /* 避开左侧图标 */
-  padding-right: 36px; /* 避开右侧 X 按钮 */
-}
-
-/* 清除按钮固定在右侧 */
-.clear-btn {
-  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
-  width: 20px; height: 20px; border-radius: 50%;
-  background: rgba(0,0,0,0.1); color: var(--text-sec);
-  font-size: 14px; line-height: 1; border: none; cursor: pointer;
-  display: flex; align-items: center; justify-content: center;
-  transition: all 0.2s;
-}
+.search-container.focused .search-input-wrapper { background: var(--input-bg); border-color: #007aff; box-shadow: 0 8px 24px rgba(0, 122, 255, 0.15); }
+.search-icon { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: var(--text-sec); opacity: 0.6; pointer-events: none; display: flex; }
+.library-search-input { width: 100%; height: 100%; background: transparent; border: none; outline: none; font-size: 1rem; color: var(--text-main); padding-left: 44px; padding-right: 36px; }
+.clear-btn { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); width: 20px; height: 20px; border-radius: 50%; background: rgba(0,0,0,0.1); color: var(--text-sec); font-size: 14px; line-height: 1; border: none; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
 .clear-btn:hover { background: rgba(0,0,0,0.2); color: var(--text-main); }
 
-
-/* --- 滚动区域 --- */
-.library-grid-wrapper {
-  flex: 1; overflow-y: auto;
+/* --- iOS 网格核心样式 --- */
+.ios-grid-wrapper {
+  flex: 1; overflow-y: auto; overflow-x: hidden;
   padding: 10px; margin: -10px;
   scrollbar-width: none;
 }
-.library-grid-wrapper::-webkit-scrollbar { display: none; }
+.ios-grid-wrapper::-webkit-scrollbar { display: none; }
 
-/* --- 网格布局 --- */
-.gallery-grid {
+.ios-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 24px;
-  padding-bottom: 80px;
+  /* [修改] 强制 3 列，列宽自适应 */
+  grid-template-columns: repeat(3, 1fr);
+  /* 调整间距，使其在不同屏幕下都比较协调 */
+  row-gap: 32px; 
+  column-gap: 12px; 
+  padding-bottom: 60px;
+  justify-items: center; /* 居中对齐 */
 }
 
-/* --- 卡片样式 --- */
-.gallery-item {
-  position: relative;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.03) 100%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 24px;
-  padding: 24px;
-  
-  display: flex; flex-direction: column; align-items: center; gap: 20px;
+/* 单个 APP 项 */
+.app-item {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
   cursor: pointer;
-  
-  transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.3s ease;
-  transform: scale(1);
+  width: 100%; /* 占满格子宽度 */
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
-/* [修复 1] 悬停效果：移除 border-color 变化，仅保留放大和背景加深 */
-.gallery-item:hover {
-  transform: scale(1.04);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.12) 0%, rgba(255, 255, 255, 0.06) 100%);
-  /* 删除了 border-color: #007aff; */
-  z-index: 1;
-}
+.app-item:hover { transform: scale(1.08); z-index: 10; }
 
-/* 图片区域 */
-.image-wrapper {
-  width: 80px; height: 80px;
-  border-radius: 20px;
-  background: rgba(0, 0, 0, 0.03);
+/* 图标容器 */
+.icon-container {
+  /* 默认桌面尺寸 */
+  width: 90px; height: 90px;
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 22px; 
   display: flex; align-items: center; justify-content: center;
-  transition: transform 0.4s ease;
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+  transition: box-shadow 0.3s ease;
 }
 
-.image-wrapper img {
-  width: 60%; height: 60%; object-fit: contain;
-  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.1));
-  transition: transform 0.4s ease;
+.app-item:hover .icon-container {
+  box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
+  background: linear-gradient(145deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
+  border-color: rgba(255, 255, 255, 0.4);
 }
 
-.gallery-item:hover img {
-  transform: scale(1.1);
+.icon-container img { width: 60%; height: 60%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
+
+.app-title {
+  font-size: 1rem; font-weight: 500;
+  color: var(--text-main); text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  max-width: 100%; opacity: 0.9;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.05);
 }
 
-/* 底部信息 */
-.item-footer {
-  width: 100%;
-  display: flex; justify-content: space-between; align-items: center;
-}
-
-.item-title {
-  font-size: 1.1rem; font-weight: 700;
-  color: var(--text-main);
-  opacity: 0.9;
-}
-
-.action-icon {
-  color: var(--text-sec); opacity: 0.5;
-  transition: all 0.3s ease;
-  transform: translateX(0);
-}
-
-.gallery-item:hover .action-icon {
-  opacity: 1; color: #007aff;
-  transform: translateX(4px);
-}
-
-/* 空状态 */
-.empty-state {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  height: 60%; color: var(--text-sec); text-align: center; margin-top: 60px;
-}
+.empty-state { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 60%; color: var(--text-sec); margin-top: 60px; }
 .empty-icon { font-size: 3rem; margin-bottom: 15px; opacity: 0.3; }
+.app-pop-enter-active, .app-pop-leave-active { transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+.app-pop-enter-from, .app-pop-leave-to { opacity: 0; transform: scale(0.5); }
 
-/* 列表动画 */
-.list-enter-active, .list-leave-active { transition: all 0.4s ease; }
-.list-enter-from, .list-leave-to { opacity: 0; transform: translateY(20px) scale(0.95); }
-
+/* 移动端适配 */
 @media (max-width: 768px) {
-  .library-container { padding: 20px; }
-  .gallery-grid { grid-template-columns: repeat(2, 1fr); gap: 16px; }
+  .library-container { padding: 20px 20px; }
   .section-title { font-size: 1.8rem; }
-  .search-container { width: 100%; }
+  .search-container { width: 100%; } 
   .search-container.focused { width: 100%; }
+  
+  /* [修改] 手机端样式调整 */
+  .ios-grid {
+    /* 依然强制 3 列 */
+    grid-template-columns: repeat(3, 1fr);
+    column-gap: 8px; /* 减小列间距 */
+    row-gap: 24px;
+  }
+  
+  /* 稍微缩小图标，防止拥挤 */
+  .icon-container { width: 72px; height: 72px; border-radius: 18px; }
+  .app-title { font-size: 0.85rem; }
 }
 </style>
