@@ -22,7 +22,6 @@ const searchQuery = ref('')
 const isSearching = ref(false)
 const highlightedNoteId = ref(null)
 
-// [修改] 增加 startY 用于检测纵向滑动
 const startX = ref(0)
 const startY = ref(0)
 const isDragging = ref(false)
@@ -37,6 +36,17 @@ const contentOpacity = ref(1)
 const currentIndex = computed(() => {
   if (!props.allItems || !props.data) return 0
   return props.allItems.findIndex(item => item.title === props.data.title)
+})
+
+// [新增] 计算所有 Note 的总数
+const totalNotesCount = computed(() => {
+  let count = 0
+  for (const key in notesCache.value) {
+    if (notesCache.value[key]) {
+      count += notesCache.value[key].length
+    }
+  }
+  return count
 })
 
 const trackStyle = computed(() => {
@@ -113,6 +123,7 @@ watch(() => props.visible, (val) => {
   } else { contentOpacity.value = 1 }
 })
 
+// --- CRUD 操作 (保持不变) ---
 const activeTitle = computed(() => props.data?.title)
 const startAdd = () => { if (!activeTitle.value) return; cancelEdit(); isAdding.value = true; nextTick(() => { scrollToBottom(); const t = document.querySelector('#new-note-textarea'); if(t) t.focus(); }) }
 const confirmInput = () => { if (!newContent.value.trim() || !activeTitle.value) return; if (!notesCache.value[activeTitle.value]) notesCache.value[activeTitle.value] = []; notesCache.value[activeTitle.value].push({ id: Date.now(), content: newContent.value }); saveNotes(activeTitle.value); newContent.value = ''; isAdding.value = false; nextTick(scrollToBottom); }
@@ -128,71 +139,24 @@ const scrollToBottom = () => { const ac = document.querySelector('.card-wrapper.
 const autoResize = (e) => { e.target.style.height = 'auto'; e.target.style.height = e.target.scrollHeight + 'px' }
 const formatIndex = (i) => (i + 1).toString().padStart(2, '0')
 
-// --- [核心修复] 滑动与点击交互 ---
 const onTouchStart = (e) => {
   if (e.target.tagName.toLowerCase() === 'textarea' || e.target.closest('button') || e.target.closest('.global-search-container')) return
-  
-  // 记录初始 X 和 Y
-  if (e.changedTouches) {
-    startX.value = e.changedTouches[0].clientX
-    startY.value = e.changedTouches[0].clientY
-  } else {
-    startX.value = e.clientX
-    startY.value = e.clientY
-  }
+  if (e.changedTouches) { startX.value = e.changedTouches[0].clientX; startY.value = e.changedTouches[0].clientY } else { startX.value = e.clientX; startY.value = e.clientY }
   isDragging.value = true
 }
-
 const onTouchEnd = (e) => {
-  if (!isDragging.value) return
-  isDragging.value = false
-  
-  const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX
-  const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY
-  
-  const diffX = endX - startX.value
-  const diffY = endY - startY.value
-  
-  // 判定逻辑：优先判断滑动
+  if (!isDragging.value) return; isDragging.value = false
+  const endX = e.changedTouches ? e.changedTouches[0].clientX : e.clientX; const endY = e.changedTouches ? e.changedTouches[0].clientY : e.clientY
+  const diffX = endX - startX.value; const diffY = endY - startY.value
   if (!isSearching.value) {
-    // 1. 横向滑动 (翻页) - 阈值 50，且横向位移大于纵向
-    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) {
-      if (diffX < 0) switchItem('next')
-      else switchItem('prev')
-      ignoreClick.value = true
-      setTimeout(() => { ignoreClick.value = false }, 100)
-      return
-    }
-    
-    // 2. [新增] 纵向滑动 (下滑关闭) - 阈值 100，且纵向位移大于横向，且是向下滑
-    if (diffY > 100 && Math.abs(diffY) > Math.abs(diffX)) {
-      // 只有在非编辑模式下允许下滑关闭
-      if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) {
-        emit('close')
-        return
-      }
-    }
+    if (Math.abs(diffX) > 50 && Math.abs(diffX) > Math.abs(diffY)) { if (diffX < 0) switchItem('next'); else switchItem('prev'); ignoreClick.value = true; setTimeout(() => { ignoreClick.value = false }, 100); return }
+    if (diffY > 100 && Math.abs(diffY) > Math.abs(diffX)) { if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) { emit('close'); return } }
   }
-
-  // 3. 点击判定 (位移很小)
   if (Math.abs(diffX) < 10 && Math.abs(diffY) < 10) {
-    const isClickOnCard = e.target.closest('.knowledge-card')
-    const isClickOnSearch = e.target.closest('.global-search-container')
-    const isClickOnResults = e.target.closest('.search-results-list')
-
-    // 如果点击的既不是卡片，也不是搜索区域，则认为是点击背景 -> 关闭
-    if (!isClickOnCard && !isClickOnSearch && !isClickOnResults) {
-      if (isSearching.value) {
-        exitSearchMode() 
-      } else {
-        if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) {
-          emit('close')
-        }
-      }
-    }
+    const isClickOnCard = e.target.closest('.knowledge-card'); const isClickOnSearch = e.target.closest('.global-search-container'); const isClickOnResults = e.target.closest('.search-results-list')
+    if (!isClickOnCard && !isClickOnSearch && !isClickOnResults) { if (isSearching.value) { exitSearchMode() } else { if (!isModifyMode.value && !isAdding.value && editingNoteId.value === null) { emit('close') } } }
   }
 }
-
 const switchItem = (direction) => { if (!props.allItems.length) return; let nextIdx; if (direction === 'next') nextIdx = (currentIndex.value + 1) % props.allItems.length; else nextIdx = (currentIndex.value - 1 + props.allItems.length) % props.allItems.length; emit('switch', props.allItems[nextIdx]) }
 </script>
 
@@ -206,10 +170,16 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
     <div class="global-search-container" :class="{ 'search-active': isSearching }" :style="{ opacity: contentOpacity, transition: 'opacity 0.3s' }" @mousedown.stop @touchstart.stop>
       <div class="search-input-wrapper">
         <span class="search-icon"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
-        <input v-model="searchQuery" class="global-search-input" placeholder="Search knowledge..." @focus="enterSearchMode" />
+        <input 
+          v-model="searchQuery" 
+          class="global-search-input" 
+          :placeholder="`Search ${totalNotesCount} notes...`" 
+          @focus="enterSearchMode" 
+        />
         <button v-if="isSearching" class="close-search-btn" @click="exitSearchMode">{{ searchQuery ? 'Clear' : 'Cancel' }}</button>
       </div>
     </div>
+
     <transition name="fade-up">
       <div class="search-results-layer" v-if="isSearching" @mousedown.stop @touchstart.stop>
         <div class="search-results-list" v-if="searchQuery">
@@ -287,7 +257,6 @@ const switchItem = (direction) => { if (!props.allItems.length) return; let next
     </div>
   </div>
 </template>
-
 <style scoped>
 /* 保持原有所有样式 */
 .card-content-wrapper { display: flex; flex-direction: column; height: 100%; width: 100%; }
