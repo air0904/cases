@@ -12,20 +12,33 @@ const searchQuery = ref('')
 const priorityWeight = { 'high': 3, 'medium': 2, 'low': 1 }
 
 const processedCases = computed(() => {
+  // 防御性检查：确保 props.cases 是数组
+  if (!Array.isArray(props.cases)) return []
+
   let result = [...props.cases]
+  
   if (searchQuery.value.trim()) {
     const query = searchQuery.value.toLowerCase()
     result = result.filter(item => 
-      item.title.toLowerCase().includes(query) ||
-      item.category.toLowerCase().includes(query) ||
-      item.description.toLowerCase().includes(query)
+      (item.title || '').toLowerCase().includes(query) ||
+      (item.category || '').toLowerCase().includes(query) ||
+      (item.description || '').toLowerCase().includes(query)
     )
   }
+  
   return result.sort((a, b) => {
-    const isAResolved = !!a.resolution; const isBResolved = !!b.resolution
+    const isAResolved = !!a.resolution
+    const isBResolved = !!b.resolution
+
     if (isAResolved !== isBResolved) return isAResolved ? 1 : -1
+
     if (!isAResolved) {
-      const weightA = priorityWeight[a.priority.toLowerCase()] || 0; const weightB = priorityWeight[b.priority.toLowerCase()] || 0
+      // [关键修复] 增加 ?. 和 || '' 保护，防止 bad data 导致白屏
+      const pA = (a.priority || '').toLowerCase()
+      const pB = (b.priority || '').toLowerCase()
+      const weightA = priorityWeight[pA] || 0
+      const weightB = priorityWeight[pB] || 0
+      
       if (weightA !== weightB) return weightB - weightA
     }
     return new Date(b.created_at) - new Date(a.created_at)
@@ -36,18 +49,22 @@ const leftColumnCases = computed(() => processedCases.value.filter((_, i) => i %
 const rightColumnCases = computed(() => processedCases.value.filter((_, i) => i % 2 !== 0))
 
 const formatDate = (dateString) => {
+  if (!dateString) return ''
   const date = new Date(dateString)
+  // 防止无效日期报错
+  if (isNaN(date.getTime())) return dateString
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }).format(date)
 }
+
 const getPriorityClass = (priority) => {
-  const p = priority.toLowerCase()
+  const p = (priority || '').toLowerCase()
   if (p === 'high') return 'badge-high'; if (p === 'medium') return 'badge-medium'; return 'badge-low'
 }
+
 const truncate = (text, length = 60) => {
   if (!text) return ''; return text.length > length ? text.substring(0, length) + '...' : text
 }
 
-// [修改] 点击处理，捕获位置
 const handleCardClick = (item, event) => {
   const rect = event.currentTarget.getBoundingClientRect()
   emit('view', { item, rect })
@@ -56,14 +73,22 @@ const handleCardClick = (item, event) => {
 
 <template>
   <div class="cases-container">
+    
     <div class="section-header">
       <div class="header-left">
         <h2 class="section-title">Cases</h2>
         <div class="header-decoration"></div>
       </div>
+      
       <div class="search-box">
-        <span class="search-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg></span>
-        <input v-model="searchQuery" placeholder="Search..." class="search-input" />
+        <span class="search-icon">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        </span>
+        <input 
+          v-model="searchQuery" 
+          :placeholder="`Search ${cases.length} cases...`" 
+          class="search-input"
+        />
         <button v-if="searchQuery" class="clear-btn" @click="searchQuery = ''">×</button>
       </div>
     </div>
@@ -107,7 +132,7 @@ const handleCardClick = (item, event) => {
             class="case-card glass-panel"
             @click="(e) => handleCardClick(item, e)"
           >
-            <div class="card-top">
+             <div class="card-top">
               <div class="category-badge"><span class="dot"></span>{{ item.category }}</div>
               <div class="priority-badge" :class="getPriorityClass(item.priority)">{{ item.priority }}</div>
             </div>
