@@ -29,34 +29,23 @@ const knowledgeItems = ref([
   { title: 'ITIL', img: '/img/people.png' }
 ])
 
-const defaultCases = [
-  { id: 1, title: 'Server Down', category: 'Linux', priority: 'High', description: 'Main production server is not responding.', resolution: 'Rebooted instance via AWS console.', created_at: '2026/1/24 10:00:00' },
-  { id: 2, title: 'SQL Injection', category: 'MySQL', priority: 'Medium', description: 'Login form vulnerability found.', resolution: 'Applied prepared statements.', created_at: '2026/1/23 14:30:00' },
-  { id: 3, title: 'Vue Bug', category: 'Vue', priority: 'Low', description: 'Router not redirecting on mobile.', resolution: '', created_at: '2026/1/20 09:15:00' },
-  { id: 4, title: 'API Timeout', category: 'Node.js', priority: 'High', description: 'Legacy API endpoints are timing out under load.', resolution: '', created_at: '2026/1/25 11:20:00' },
-  { id: 5, title: 'CSS Layout', category: 'Vue', priority: 'Low', description: 'Footer misalignment on Safari.', resolution: 'Fixed flexbox gap.', created_at: '2026/1/26 15:00:00' }
-]
+// --- [修改 1] 数据源现在默认为空，等待 API 加载 ---
+const casesData = ref([])
 
-const initCases = () => {
+// --- [修改 2] 从后端 API 加载 Cases 数据 ---
+const loadCases = async () => {
   try {
-    const saved = localStorage.getItem('my-cases-data')
-    if (saved) {
-      const parsed = JSON.parse(saved)
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed
-      }
+    // 这里的 /api 在生产环境会通过 Nginx 转发到 Node 后端
+    const res = await fetch('/api/cases')
+    if (res.ok) {
+      casesData.value = await res.json()
+    } else {
+      console.error('加载工单失败:', res.status)
     }
   } catch (e) {
-    console.warn('Data corrupted, resetting.', e)
+    console.error('无法连接到服务器:', e)
   }
-  return defaultCases
 }
-
-const casesData = ref(initCases())
-
-watch(casesData, (newVal) => {
-  localStorage.setItem('my-cases-data', JSON.stringify(newVal))
-}, { deep: true })
 
 const showCaseModal = ref(false)
 const modalMode = ref('view')
@@ -121,25 +110,56 @@ const openViewModal = ({ item, rect }) => {
   showCaseModal.value = true
 }
 
-// [核心修改] 新增工单：使用创建时间的数字组合作为 ID
-const handleCreateSubmit = (newItem) => { 
-  // 提取 created_at 中的所有数字，转为 Number
-  // 例如 "2026/1/29 14:30:05" -> 2026129143005
+// --- [修改 3] 新增工单：同时更新 UI 和 后端 ---
+const handleCreateSubmit = async (newItem) => { 
+  // 提取 created_at 中的所有数字作为 ID
   const timeStr = newItem.created_at || ''
   const newId = Number(timeStr.replace(/\D/g, '')) || Date.now()
+  const payload = { ...newItem, id: newId }
   
-  casesData.value.unshift({ ...newItem, id: newId }) 
-  showCaseModal.value = false 
+  // 乐观更新 UI
+  casesData.value.unshift(payload)
+  showCaseModal.value = false
+
+  // 发送给后端
+  try {
+    await fetch('/api/cases', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    })
+  } catch (e) {
+    console.error('保存工单失败', e)
+    alert('Failed to save to server')
+  }
 }
 
-const handleUpdateSubmit = (updatedItem) => { 
+// --- [修改 4] 更新工单：同时更新 UI 和 后端 ---
+const handleUpdateSubmit = async (updatedItem) => { 
   const index = casesData.value.findIndex(c => c.id === updatedItem.id)
-  if (index !== -1) casesData.value[index] = updatedItem
+  if (index !== -1) casesData.value[index] = updatedItem // UI 更新
+  
+  try {
+    await fetch(`/api/cases/${updatedItem.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updatedItem)
+    })
+  } catch (e) {
+    console.error('更新工单失败', e)
+  }
 }
 
-const handleDeleteCase = (id) => { 
-  casesData.value = casesData.value.filter(c => c.id !== id)
+// --- [修改 5] 删除工单：同时更新 UI 和 后端 ---
+const handleDeleteCase = async (id) => { 
+  casesData.value = casesData.value.filter(c => c.id !== id) // UI 更新
   showCaseModal.value = false 
+  
+  try {
+    await fetch(`/api/cases/${id}`, { method: 'DELETE' })
+  } catch (e) {
+    console.error('删除工单失败', e)
+  }
 }
 
 const handleAction = (action) => { if (action === 'switch-case') switchTab('cases') }
@@ -153,6 +173,7 @@ const onPointerUp = (e) => {
 }
 
 onMounted(() => {
+  loadCases() // 启动时加载数据
   nextTick(() => updateNavIndicator())
   window.addEventListener('resize', updateNavIndicator)
 })
