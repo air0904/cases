@@ -8,60 +8,53 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // 中间件
-app.use(cors()); // 允许跨域
-app.use(express.json()); // 允许解析 JSON 请求体
+app.use(cors());
+app.use(express.json());
 
 // --- 路由编写区域 ---
 
 // 1. 测试路由
 app.get('/', (req, res) => {
-  res.send('Hello! Backend is running.');
+  res.send('Backend is running!');
 });
 
-// 2. 获取所有 Case (GET /api/cases)
-// 修改 server/index.js 中的第 21 行左右
+// ================= CASES 接口 =================
+
+// 获取所有 Case
 app.get('/api/cases', async (req, res) => {
   try {
-    // 增加一个简单的日志，看看请求有没有进来
-    console.log('收到前端请求数据请求...');
-    const [rows] = await db.query('SELECT * FROM support_tickets ORDER BY created_at DESC');
-    console.log('数据库查询成功，返回行数:', rows.length);
+    const [rows] = await db.query('SELECT * FROM cases ORDER BY created_at DESC');
     res.json(rows);
   } catch (err) {
-    // ⚠️ 这一行非常重要，它会把真正的错误直接喷在浏览器页面上
-    console.error("❌ 数据库查询失败:", err);
-    res.status(500).json({ 
-      error: 'Database error', 
-      message: err.message, 
-      code: err.code 
-    });
+    console.error(err);
+    res.status(500).json({ error: err.message });
   }
 });
 
-// 3. 新增 Case (POST /api/cases)
+// 新增 Case
 app.post('/api/cases', async (req, res) => {
-  const { title, category, priority, description, resolution } = req.body;
+  // 我们直接使用前端生成的 ID (基于时间戳)
+  const { id, title, category, priority, description, resolution, created_at, resolved_at } = req.body;
   try {
-    const [result] = await db.query(
-      'INSERT INTO support_tickets (title, category, priority, description, resolution) VALUES (?, ?, ?, ?, ?)',
-      [title, category, priority, description, resolution]
+    await db.query(
+      'INSERT INTO cases (id, title, category, priority, description, resolution, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, category, priority, description, resolution, created_at, resolved_at]
     );
-    // 返回新创建的数据 ID
-    res.status(201).json({ id: result.insertId, ...req.body });
+    res.status(201).json({ message: 'Case created successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to create case' });
   }
 });
 
-// 4. 更新 Case (PUT /api/cases/:id)
+// 更新 Case
 app.put('/api/cases/:id', async (req, res) => {
   const { id } = req.params;
-  const { title, category, priority, description, resolution } = req.body;
+  const { title, category, priority, description, resolution, resolved_at } = req.body;
   try {
     await db.query(
-      'UPDATE support_tickets SET title=?, category=?, priority=?, description=?, resolution=? WHERE id=?',
-      [title, category, priority, description, resolution, id]
+      'UPDATE cases SET title=?, category=?, priority=?, description=?, resolution=?, resolved_at=? WHERE id=?',
+      [title, category, priority, description, resolution, resolved_at, id]
     );
     res.json({ message: 'Case updated successfully' });
   } catch (err) {
@@ -70,15 +63,69 @@ app.put('/api/cases/:id', async (req, res) => {
   }
 });
 
-// 5. 删除 Case (DELETE /api/cases/:id)
+// 删除 Case
 app.delete('/api/cases/:id', async (req, res) => {
   const { id } = req.params;
   try {
-    await db.query('DELETE FROM support_tickets WHERE id=?', [id]);
+    await db.query('DELETE FROM cases WHERE id=?', [id]);
     res.json({ message: 'Case deleted successfully' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete case' });
+  }
+});
+
+// ================= NOTES 接口 =================
+
+// 获取所有 Notes
+app.get('/api/notes', async (req, res) => {
+  try {
+    const [rows] = await db.query('SELECT * FROM notes ORDER BY id ASC');
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 新增 Note
+app.post('/api/notes', async (req, res) => {
+  const { category, content } = req.body;
+  try {
+    const [result] = await db.query(
+      'INSERT INTO notes (category, content) VALUES (?, ?)',
+      [category, content]
+    );
+    // 返回新生成的 ID，方便前端立刻使用
+    res.status(201).json({ id: result.insertId, category, content });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to create note' });
+  }
+});
+
+// 更新 Note (只更新内容)
+app.put('/api/notes/:id', async (req, res) => {
+  const { id } = req.params;
+  const { content } = req.body;
+  try {
+    await db.query('UPDATE notes SET content=? WHERE id=?', [content, id]);
+    res.json({ message: 'Note updated successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to update note' });
+  }
+});
+
+// 删除 Note
+app.delete('/api/notes/:id', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await db.query('DELETE FROM notes WHERE id=?', [id]);
+    res.json({ message: 'Note deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete note' });
   }
 });
 
