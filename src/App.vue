@@ -29,13 +29,12 @@ const knowledgeItems = ref([
   { title: 'ITIL', img: '/img/people.png' }
 ])
 
-// --- [修改 1] 数据源现在默认为空，等待 API 加载 ---
+// 数据源
 const casesData = ref([])
 
-// --- [修改 2] 从后端 API 加载 Cases 数据 ---
+// 加载 Cases 数据 (公开接口，无需 Token)
 const loadCases = async () => {
   try {
-    // 这里的 /api 在生产环境会通过 Nginx 转发到 Node 后端
     const res = await fetch('/api/cases')
     if (res.ok) {
       casesData.value = await res.json()
@@ -110,55 +109,74 @@ const openViewModal = ({ item, rect }) => {
   showCaseModal.value = true
 }
 
-// --- [修改 3] 新增工单：同时更新 UI 和 后端 ---
+// 新增工单：增加 Authorization Token 校验
 const handleCreateSubmit = async (newItem) => { 
-  // 提取 created_at 中的所有数字作为 ID
   const timeStr = newItem.created_at || ''
   const newId = Number(timeStr.replace(/\D/g, '')) || Date.now()
   const payload = { ...newItem, id: newId }
   
+  const token = localStorage.getItem('authToken') // 获取安全令牌
+
   // 乐观更新 UI
   casesData.value.unshift(payload)
   showCaseModal.value = false
 
-  // 发送给后端
   try {
-    await fetch('/api/cases', {
+    const res = await fetch('/api/cases', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}` // 发送令牌进行安保验证
+      },
       body: JSON.stringify(payload)
     })
+    if (!res.ok) throw new Error('Unauthorized or Server Error')
   } catch (e) {
-    console.error('保存工单失败', e)
-    alert('Failed to save to server')
+    console.error('保存失败', e)
+    alert('操作失败，请确认是否已登录。')
+    loadCases() // 失败时回滚数据
   }
 }
 
-// --- [修改 4] 更新工单：同时更新 UI 和 后端 ---
+// 更新工单：增加 Authorization Token 校验
 const handleUpdateSubmit = async (updatedItem) => { 
   const index = casesData.value.findIndex(c => c.id === updatedItem.id)
-  if (index !== -1) casesData.value[index] = updatedItem // UI 更新
+  if (index !== -1) casesData.value[index] = updatedItem 
   
+  const token = localStorage.getItem('authToken')
+
   try {
-    await fetch(`/api/cases/${updatedItem.id}`, {
+    const res = await fetch(`/api/cases/${updatedItem.id}`, {
       method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
       body: JSON.stringify(updatedItem)
     })
+    if (!res.ok) throw new Error('Unauthorized')
   } catch (e) {
-    console.error('更新工单失败', e)
+    console.error('更新失败', e)
+    loadCases()
   }
 }
 
-// --- [修改 5] 删除工单：同时更新 UI 和 后端 ---
+// 删除工单：增加 Authorization Token 校验
 const handleDeleteCase = async (id) => { 
-  casesData.value = casesData.value.filter(c => c.id !== id) // UI 更新
+  casesData.value = casesData.value.filter(c => c.id !== id)
   showCaseModal.value = false 
   
+  const token = localStorage.getItem('authToken')
+
   try {
-    await fetch(`/api/cases/${id}`, { method: 'DELETE' })
+    const res = await fetch(`/api/cases/${id}`, { 
+      method: 'DELETE',
+      headers: { 'Authorization': `Bearer ${token}` }
+    })
+    if (!res.ok) throw new Error('Unauthorized')
   } catch (e) {
-    console.error('删除工单失败', e)
+    console.error('删除失败', e)
+    loadCases()
   }
 }
 
@@ -173,7 +191,7 @@ const onPointerUp = (e) => {
 }
 
 onMounted(() => {
-  loadCases() // 启动时加载数据
+  loadCases() 
   nextTick(() => updateNavIndicator())
   window.addEventListener('resize', updateNavIndicator)
 })
@@ -236,7 +254,6 @@ onUnmounted(() => {
     :visible="showCaseModal"
     :mode="modalMode"
     :caseData="currentCase"
-    :allCases="casesData"
     :isAdmin="authMode === 'admin'"
     :originRect="caseModalOriginRect"
     @close="showCaseModal = false"
@@ -277,5 +294,7 @@ onUnmounted(() => {
 @media (max-width: 768px) {
   .section-container { width: 100%; padding: 0 10px; }
   .fab-add { right: 20px; bottom: 100px; width: 50px; height: 50px; }
+  /* 导航栏层级提升，确保手机端点击灵敏 */
+  .bottom-nav { z-index: 1000; }
 }
 </style>
