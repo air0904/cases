@@ -5,28 +5,45 @@ const emit = defineEmits(['unlock'])
 
 const password = ref('')
 const isShaking = ref(false)
-const SECRET_KEY = "123456"
+const isLoading = ref(false) // 新增加载状态
 
-const handleConfirm = () => {
-  if (password.value === SECRET_KEY) {
-    // 密码正确，发送解锁信号
-    emit('unlock', 'admin')
-  } else {
-    // 密码错误，抖动
+const handleConfirm = async () => {
+  if (!password.value) return triggerShake()
+  
+  isLoading.value = true
+  try {
+    const res = await fetch('/api/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: password.value })
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      // 登录成功，把令牌存进浏览器
+      localStorage.setItem('authToken', data.token)
+      emit('unlock', 'admin')
+    } else {
+      triggerShake()
+    }
+  } catch (e) {
+    console.error(e)
     triggerShake()
+  } finally {
+    isLoading.value = false
   }
 }
 
 const handleGuest = () => {
+  // Guest 不需要令牌，或者清除旧令牌
+  localStorage.removeItem('authToken')
   emit('unlock', 'guest')
 }
 
 const triggerShake = () => {
   isShaking.value = true
   password.value = ''
-  setTimeout(() => {
-    isShaking.value = false
-  }, 500)
+  setTimeout(() => { isShaking.value = false }, 500)
 }
 </script>
 
@@ -44,14 +61,22 @@ const triggerShake = () => {
         type="password" 
         v-model="password"
         class="auth-input" 
-        placeholder="Enter Key" 
+        :placeholder="isLoading ? 'Verifying...' : 'Enter Key'" 
         @keyup.enter="handleConfirm"
+        :disabled="isLoading"
       />
       
       <div class="auth-actions">
         <button class="btn-link" @click="handleGuest">I'm not Stephen</button>
-        <button class="btn-confirm" @click="handleConfirm">Confirm</button>
+        <button class="btn-confirm" @click="handleConfirm" :disabled="isLoading">
+          {{ isLoading ? '...' : 'Confirm' }}
+        </button>
       </div>
     </div>
   </div>
 </template>
+
+<style scoped>
+/* ... 保持原样 ... */
+.avatar img { max-width: 70px !important; max-height: 70px !important; border-radius: 50%; }
+</style>
