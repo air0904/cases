@@ -251,16 +251,16 @@ onUnmounted(() => {
   >+</div>
 
   <CaseModal 
-    :visible="showCaseModal"
-    :mode="modalMode"
-    :caseData="currentCase"
-    :isAdmin="authMode === 'admin'"
-    :originRect="caseModalOriginRect"
-    @close="showCaseModal = false"
-    @submit="handleCreateSubmit"
-    @update="handleUpdateSubmit"
-    @delete="handleDeleteCase"
-  />
+  :visible="showCaseModal"
+  :mode="modalMode"
+  :caseData="currentCase"
+  :allCases="casesData"  :isAdmin="authMode === 'admin'"
+  :originRect="caseModalOriginRect"
+  @close="showCaseModal = false"
+  @submit="handleCreateSubmit"
+  @update="handleUpdateSubmit"
+  @delete="handleDeleteCase"
+/>
 
   <KnowledgeCard 
     :visible="showKnowledge"
