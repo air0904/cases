@@ -164,8 +164,19 @@ const confirmInput = async () => {
   }
 }
 
-const startEdit = (note) => { if (props.data.title !== activeTitle.value) return; if (isAdding.value) isAdding.value = false; editingNoteId.value = note.id; editingContent.value = note.content; nextTick(() => { const t = document.querySelector(`#edit-textarea-${note.id}`); if(t){ autoResize({target:t}); t.focus(); } }) }
+// [需求2 修改点]：添加权限校验，如果不是 admin，直接 return，不进入编辑状态
+const startEdit = (note) => { 
+  if (!props.isAdmin) return; // <--- 新增这行
 
+  if (props.data.title !== activeTitle.value) return; 
+  if (isAdding.value) isAdding.value = false; 
+  editingNoteId.value = note.id; 
+  editingContent.value = note.content; 
+  nextTick(() => { 
+    const t = document.querySelector(`#edit-textarea-${note.id}`); 
+    if(t){ autoResize({target:t}); t.focus(); } 
+  }) 
+}
 const updateNote = async () => { 
   if (!editingContent.value.trim() || !activeTitle.value) return
   
