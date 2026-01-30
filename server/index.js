@@ -1,135 +1,132 @@
-// server/index.js
 const express = require('express');
 const cors = require('cors');
 const db = require('./db');
+const jwt = require('jsonwebtoken');
+const helmet = require('helmet');
+const createDOMPurify = require('dompurify');
+const { JSDOM } = require('jsdom');
 require('dotenv').config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
+const SECRET_KEY = process.env.JWT_SECRET || 'PLEASE_CHANGE_THIS_SECRET_IN_ENV'; // 密钥
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || '123456'; // 真正的密码
 
-// 中间件
+const window = new JSDOM('').window;
+const DOMPurify = createDOMPurify(window);
+
+// 1. 安全中间件 (Helmet)
+app.use(helmet()); 
 app.use(cors());
 app.use(express.json());
 
-// --- 路由编写区域 ---
+// --- 中间件：验证 Token (保安) ---
+const authenticateToken = (req, res, next) => {
+  // 从请求头获取 Authorization: Bearer <token>
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-// 1. 测试路由
-app.get('/', (req, res) => {
-  res.send('Backend is running!');
+  if (token == null) return res.sendStatus(401); // 没票？滚蛋
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) return res.sendStatus(403); // 票是假的？滚蛋
+    req.user = user;
+    next(); // 放行
+  });
+};
+
+// --- 路由 ---
+
+// [新增] 登录接口
+app.post('/api/login', (req, res) => {
+  const { password } = req.body;
+  // 这里比对环境变量里的密码
+  if (password === ADMIN_PASSWORD) {
+    // 密码正确，签发 Token，有效期 24小时
+    const token = jwt.sign({ role: 'admin' }, SECRET_KEY, { expiresIn: '24h' });
+    res.json({ token });
+  } else {
+    res.status(401).json({ error: 'Wrong password' });
+  }
 });
 
-// ================= CASES 接口 =================
-
-// 获取所有 Case
+// GET 接口保持公开 (Guest 可看)
 app.get('/api/cases', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM cases ORDER BY created_at DESC');
     res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 新增 Case
-app.post('/api/cases', async (req, res) => {
-  // 我们直接使用前端生成的 ID (基于时间戳)
-  const { id, title, category, priority, description, resolution, created_at, resolved_at } = req.body;
-  try {
-    await db.query(
-      'INSERT INTO cases (id, title, category, priority, description, resolution, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-      [id, title, category, priority, description, resolution, created_at, resolved_at]
-    );
-    res.status(201).json({ message: 'Case created successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create case' });
-  }
-});
-
-// 更新 Case
-app.put('/api/cases/:id', async (req, res) => {
-  const { id } = req.params;
-  const { title, category, priority, description, resolution, resolved_at } = req.body;
-  try {
-    await db.query(
-      'UPDATE cases SET title=?, category=?, priority=?, description=?, resolution=?, resolved_at=? WHERE id=?',
-      [title, category, priority, description, resolution, resolved_at, id]
-    );
-    res.json({ message: 'Case updated successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update case' });
-  }
-});
-
-// 删除 Case
-app.delete('/api/cases/:id', async (req, res) => {
-  const { id } = req.params;
-  try {
-    await db.query('DELETE FROM cases WHERE id=?', [id]);
-    res.json({ message: 'Case deleted successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to delete case' });
-  }
-});
-
-// ================= NOTES 接口 =================
-
-// 获取所有 Notes
 app.get('/api/notes', async (req, res) => {
   try {
     const [rows] = await db.query('SELECT * FROM notes ORDER BY id ASC');
     res.json(rows);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 新增 Note
-app.post('/api/notes', async (req, res) => {
-  const { category, content } = req.body;
+// === 下面的写操作，全部加上 authenticateToken 保护 ===
+
+app.post('/api/cases', authenticateToken, async (req, res) => {
+  const { id, title, category, priority, description, resolution, created_at, resolved_at } = req.body;
+  // XSS 清洗
+  const cleanDesc = DOMPurify.sanitize(description);
+  const cleanRes = DOMPurify.sanitize(resolution);
+  
   try {
-    const [result] = await db.query(
-      'INSERT INTO notes (category, content) VALUES (?, ?)',
-      [category, content]
+    await db.query(
+      'INSERT INTO cases (id, title, category, priority, description, resolution, created_at, resolved_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      [id, title, category, priority, cleanDesc, cleanRes, created_at, resolved_at]
     );
-    // 返回新生成的 ID，方便前端立刻使用
-    res.status(201).json({ id: result.insertId, category, content });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to create note' });
-  }
+    res.status(201).json({ message: 'Success' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 更新 Note (只更新内容)
-app.put('/api/notes/:id', async (req, res) => {
-  const { id } = req.params;
-  const { content } = req.body;
+app.put('/api/cases/:id', authenticateToken, async (req, res) => {
+  const { title, category, priority, description, resolution, resolved_at } = req.body;
+  const cleanDesc = DOMPurify.sanitize(description);
+  const cleanRes = DOMPurify.sanitize(resolution);
+
   try {
-    await db.query('UPDATE notes SET content=? WHERE id=?', [content, id]);
-    res.json({ message: 'Note updated successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to update note' });
-  }
+    await db.query(
+      'UPDATE cases SET title=?, category=?, priority=?, description=?, resolution=?, resolved_at=? WHERE id=?',
+      [title, category, priority, cleanDesc, cleanRes, resolved_at, req.params.id]
+    );
+    res.json({ message: 'Updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// 删除 Note
-app.delete('/api/notes/:id', async (req, res) => {
-  const { id } = req.params;
+app.delete('/api/cases/:id', authenticateToken, async (req, res) => {
   try {
-    await db.query('DELETE FROM notes WHERE id=?', [id]);
-    res.json({ message: 'Note deleted successfully' });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: 'Failed to delete note' });
-  }
+    await db.query('DELETE FROM cases WHERE id=?', [req.params.id]);
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// --- 启动服务器 ---
-app.listen(PORT, () => {
-  console.log(`🚀 Server is running on http://localhost:${PORT}`);
+app.post('/api/notes', authenticateToken, async (req, res) => {
+  const { category, content } = req.body;
+  // XSS 清洗：防止有人在笔记里写 <script>alert(1)</script>
+  const cleanContent = DOMPurify.sanitize(content);
+  
+  try {
+    const [result] = await db.query('INSERT INTO notes (category, content) VALUES (?, ?)', [category, cleanContent]);
+    res.json({ id: result.insertId, category, content: cleanContent });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
+
+app.put('/api/notes/:id', authenticateToken, async (req, res) => {
+  const cleanContent = DOMPurify.sanitize(req.body.content);
+  try {
+    await db.query('UPDATE notes SET content=? WHERE id=?', [cleanContent, req.params.id]);
+    res.json({ message: 'Updated' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.delete('/api/notes/:id', authenticateToken, async (req, res) => {
+  try {
+    await db.query('DELETE FROM notes WHERE id=?', [req.params.id]);
+    res.json({ message: 'Deleted' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+app.listen(PORT, () => console.log(`Secure Server running on port ${PORT}`));
