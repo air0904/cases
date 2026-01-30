@@ -67,8 +67,13 @@
 @keyframes popIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
 /* --- 3. 全局重置 --- */
-* { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased; user-select: none; }
-ul, li { list-style: none; }
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-font-smoothing: antialiased;
+     input, textarea {
+    user-select: auto !important;
+    -webkit-user-select: auto !important;
+}
+
+ul, li { list-style: none; }}
 
 body {
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", sans-serif;
