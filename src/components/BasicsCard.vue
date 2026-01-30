@@ -76,14 +76,12 @@ const handleClick = (item, event) => {
 </template>
 
 <style scoped>
-/* 容器 */
+/* ... (保留原有顶部样式，如 .library-container, .section-header 等) ... */
 .library-container {
   width: 100%; height: 100%;
-  padding: 30px 40px; /* 增加一点顶部内边距 */
+  padding: 30px 40px;
   display: flex; flex-direction: column;
 }
-
-/* 顶部栏 */
 .section-header {
   margin-bottom: 20px;
   display: flex; justify-content: space-between; align-items: center;
@@ -96,8 +94,6 @@ const handleClick = (item, event) => {
   -webkit-background-clip: text; -webkit-text-fill-color: transparent;
   letter-spacing: -0.5px;
 }
-
-/* 搜索框 */
 .search-container { width: 260px; transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); }
 .search-container.focused { width: 320px; }
 .search-input-wrapper {
@@ -122,29 +118,26 @@ const handleClick = (item, event) => {
 
 .ios-grid {
   display: grid;
-  /* [修改] 强制 3 列，列宽自适应 */
-  grid-template-columns: repeat(3, 1fr);
-  /* 调整间距，使其在不同屏幕下都比较协调 */
+  /* [需求1 修改点]：宽屏默认显示 6 列 */
+  grid-template-columns: repeat(6, 1fr);
   row-gap: 32px; 
   column-gap: 12px; 
   padding-bottom: 60px;
-  justify-items: center; /* 居中对齐 */
+  justify-items: center;
 }
 
 /* 单个 APP 项 */
 .app-item {
   display: flex; flex-direction: column; align-items: center; gap: 12px;
   cursor: pointer;
-  width: 100%; /* 占满格子宽度 */
+  width: 100%;
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-
 .app-item:hover { transform: scale(1.08); z-index: 10; }
 
 /* 图标容器 */
 .icon-container {
-  /* 默认桌面尺寸 */
-  width: 90px; height: 90px;
+  width: 90px; height: 90px; /* 如果6列太挤，可以适当减小这个尺寸，比如 80px */
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.15) 0%, rgba(255, 255, 255, 0.05) 100%);
   backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.2);
@@ -153,13 +146,11 @@ const handleClick = (item, event) => {
   box-shadow: 0 4px 10px rgba(0,0,0,0.05);
   transition: box-shadow 0.3s ease;
 }
-
 .app-item:hover .icon-container {
   box-shadow: 0 12px 24px rgba(0, 0, 0, 0.15);
   background: linear-gradient(145deg, rgba(255, 255, 255, 0.2) 0%, rgba(255, 255, 255, 0.1) 100%);
   border-color: rgba(255, 255, 255, 0.4);
 }
-
 .icon-container img { width: 60%; height: 60%; object-fit: contain; filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1)); }
 
 .app-title {
@@ -182,15 +173,13 @@ const handleClick = (item, event) => {
   .search-container { width: 100%; } 
   .search-container.focused { width: 100%; }
   
-  /* [修改] 手机端样式调整 */
   .ios-grid {
-    /* 依然强制 3 列 */
+    /* [需求1 修改点]：窄屏/手机端强制改为 3 列 */
     grid-template-columns: repeat(3, 1fr);
-    column-gap: 8px; /* 减小列间距 */
+    column-gap: 8px;
     row-gap: 24px;
   }
   
-  /* 稍微缩小图标，防止拥挤 */
   .icon-container { width: 72px; height: 72px; border-radius: 18px; }
   .app-title { font-size: 0.85rem; }
 }
