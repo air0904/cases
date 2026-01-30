@@ -2,74 +2,41 @@
 import { ref, watch, nextTick } from 'vue'
 
 const props = defineProps({
-  visible: Boolean,
-  mode: String,
-  caseData: Object,
-  allCases: { type: Array, default: () => [] },
-  isAdmin: Boolean,
-  originRect: Object
+  visible: Boolean, mode: String, caseData: Object, 
+  allCases: { type: Array, default: () => [] }, // 确保父组件传了这个值
+  isAdmin: Boolean, originRect: Object
 })
-
 const emit = defineEmits(['close', 'submit', 'update', 'delete'])
 
-const form = ref({
-  id: null, title: '', category: 'Linux', priority: 'Medium', 
-  description: '', resolution: '', created_at: '', resolved_at: ''
-})
-
+const form = ref({ id: null, title: '', category: 'Linux', priority: 'Medium', description: '', resolution: '', created_at: '', resolved_at: '' })
 const isEditing = ref(false)
 const isShaking = ref(false)
 const titleWarning = ref(false)
 const showDeleteConfirm = ref(false)
-
-// 动画控制
 const showAnimation = ref(false)
 const isPreparing = ref(false)
 
 const resetForm = () => {
-  form.value = { 
-    id: null, title: '', category: 'Linux', priority: 'Medium', 
-    description: '', resolution: '', created_at: '', resolved_at: ''
-  }
-  titleWarning.value = false
-  showDeleteConfirm.value = false
-  isShaking.value = false
+  form.value = { id: null, title: '', category: 'Linux', priority: 'Medium', description: '', resolution: '', created_at: '', resolved_at: '' }
+  titleWarning.value = false; showDeleteConfirm.value = false; isShaking.value = false
 }
-
-// [新增] 统一时间格式化工具: YYYY/M/D HH:mm:ss
 const formatTime = (date) => {
-  const y = date.getFullYear()
-  const m = date.getMonth() + 1
-  const d = date.getDate()
-  const h = date.getHours().toString().padStart(2, '0')
-  const min = date.getMinutes().toString().padStart(2, '0')
-  const s = date.getSeconds().toString().padStart(2, '0')
+  const y = date.getFullYear(); const m = date.getMonth() + 1; const d = date.getDate()
+  const h = date.getHours().toString().padStart(2, '0'); const min = date.getMinutes().toString().padStart(2, '0'); const s = date.getSeconds().toString().padStart(2, '0')
   return `${y}/${m}/${d} ${h}:${min}:${s}`
 }
-
-// 动画逻辑
 const triggerDropAnimation = () => {
   isPreparing.value = true; showAnimation.value = false
   setTimeout(() => { isPreparing.value = false; showAnimation.value = true }, 100)
 }
-
 watch(() => props.visible, (val) => {
   if (val) {
     triggerDropAnimation()
-    if (props.mode === 'create') {
-      resetForm(); isEditing.value = true
-    } else if (props.caseData) {
-      form.value = { ...props.caseData }; isEditing.value = false
-    }
-  } else {
-    showAnimation.value = false; isPreparing.value = false
-    titleWarning.value = false; isShaking.value = false; showDeleteConfirm.value = false
-  }
+    if (props.mode === 'create') { resetForm(); isEditing.value = true }
+    else if (props.caseData) { form.value = { ...props.caseData }; isEditing.value = false }
+  } else { showAnimation.value = false; isPreparing.value = false; titleWarning.value = false; isShaking.value = false; showDeleteConfirm.value = false }
 })
-
-watch(() => props.caseData, (newVal) => {
-  if (props.visible && newVal) form.value = { ...newVal }
-}, { immediate: true })
+watch(() => props.caseData, (newVal) => { if (props.visible && newVal) form.value = { ...newVal } }, { immediate: true })
 
 const switchCase = (direction) => {
   if (props.mode === 'create' || !props.allCases.length) return
@@ -85,32 +52,14 @@ const switchCase = (direction) => {
 }
 
 const triggerShake = () => { isShaking.value = true; setTimeout(() => { isShaking.value = false }, 500) }
-
 const handleSubmit = () => {
   if (!form.value.title || !form.value.title.trim()) { titleWarning.value = true; triggerShake(); return }
-  
-  // [修改] 统一解决时间的格式
-  if (form.value.resolution && !form.value.resolved_at) {
-    form.value.resolved_at = formatTime(new Date())
-  }
-
-  if (props.mode === 'create') {
-    // [修改] 创建时间也使用统一格式
-    emit('submit', { ...form.value, created_at: formatTime(new Date()) })
-  } else {
-    emit('update', { ...form.value })
-    isEditing.value = false
-  }
+  if (form.value.resolution && !form.value.resolved_at) { form.value.resolved_at = formatTime(new Date()) }
+  if (props.mode === 'create') { emit('submit', { ...form.value, created_at: formatTime(new Date()) }) }
+  else { emit('update', { ...form.value }); isEditing.value = false }
 }
-
 const toggleEdit = () => { isEditing.value = true }
-const cancelEdit = () => {
-  isEditing.value = false
-  const original = props.allCases.find(c => c.id === form.value.id)
-  if (original) form.value = { ...original }
-  else if (props.caseData) form.value = { ...props.caseData }
-  titleWarning.value = false
-}
+const cancelEdit = () => { isEditing.value = false; if (props.caseData) form.value = { ...props.caseData }; titleWarning.value = false }
 const handleDeleteClick = () => { triggerShake(); showDeleteConfirm.value = true }
 const confirmDelete = () => { emit('delete', form.value.id); showDeleteConfirm.value = false }
 const cancelDelete = () => { showDeleteConfirm.value = false }
@@ -122,7 +71,7 @@ const handleDownload = () => {
 
 <template>
   <div class="case-modal-overlay" :class="{ visible: visible }">
-    <button v-if="mode === 'view'" class="nav-btn prev-btn" @click="switchCase('prev')">
+    <button v-if="mode === 'view'" class="nav-btn prev-btn" @click.stop="switchCase('prev')">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"></polyline></svg>
     </button>
 
@@ -207,35 +156,30 @@ const handleDownload = () => {
       </transition>
     </div>
     
-    <button v-if="mode === 'view'" class="nav-btn next-btn" @click="switchCase('next')">
+    <button v-if="mode === 'view'" class="nav-btn next-btn" @click.stop="switchCase('next')">
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="9 18 15 12 9 6"></polyline></svg>
     </button>
   </div>
 </template>
 
 <style scoped>
-/* 掉落动画 */
 .drop-item { opacity: 1; transform: translateY(0); transition: none; }
 .modal-card.preparing .drop-item { opacity: 0; transform: translateY(-20px); }
-.modal-card.animate-drop .drop-item {
-  animation: dropIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
-  animation-delay: var(--delay); opacity: 0; 
-}
+.modal-card.animate-drop .drop-item { animation: dropIn 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) forwards; animation-delay: var(--delay); opacity: 0; }
 @keyframes dropIn { from { opacity: 0; transform: translateY(-25px); } to { opacity: 1; transform: translateY(0); } }
 
-/* 基础布局 */
 .case-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: var(--modal-overlay, rgba(240, 242, 245, 0.6)); backdrop-filter: blur(20px); z-index: 1000; display: flex; align-items: center; justify-content: center; opacity: 0; pointer-events: none; transition: opacity 0.3s; }
 .case-modal-overlay.visible { opacity: 1; pointer-events: auto; }
-
 .modal-card { width: 600px; max-width: 90vw; height: 92vh; padding: 40px; border-radius: 35px; background: var(--glass-bg, rgba(255, 255, 255, 0.85)); border: 1px solid var(--glass-border, rgba(255, 255, 255, 0.4)); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15); display: flex; flex-direction: column; position: relative; overflow: hidden; transform: scale(0.95); opacity: 0; transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
 .case-modal-overlay.visible .modal-card { transform: scale(1); opacity: 1; }
 
+/* [修复] 按钮样式 - 在PC上显示 */
 .nav-btn { position: absolute; top: 50%; transform: translateY(-50%); width: 50px; height: 50px; border-radius: 50%; background: #007aff; color: white; border: none; box-shadow: 0 8px 25px rgba(0, 122, 255, 0.4); display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 1001; transition: all 0.2s; }
 .nav-btn:hover { transform: translateY(-50%) scale(1.1); background: #0063d1; }
 .prev-btn { left: calc(50% - 300px - 70px); }
 .next-btn { right: calc(50% - 300px - 70px); }
 
-/* 间距与样式 */
+/* ... (中间的 modal-body, form-group 等样式保持不变) ... */
 .modal-header { flex-shrink: 0; margin-bottom: 20px; }
 .header-content { display: flex; justify-content: space-between; align-items: center; }
 .modal-header h2 { font-size: 1.8rem; font-weight: 700; color: var(--text-main); margin: 0; }
@@ -244,11 +188,8 @@ const handleDownload = () => {
 .form-row { display: flex; gap: 20px; }
 .form-group { flex: 1; display: flex; flex-direction: column; gap: 8px; }
 .form-group label { font-size: 0.9rem; font-weight: 600; color: var(--text-sec); }
-
 .modal-input { width: 100%; padding: 12px 16px; border-radius: 12px; border: 1px solid var(--glass-border, rgba(0,0,0,0.1)); background: var(--input-bg, rgba(255,255,255,0.5)); font-size: 1rem; outline: none; transition: all 0.3s; color: var(--text-main); }
-/* Title 输入框特化 */
 .title-input { height: 56px; font-size: 1.2rem; font-weight: 600; }
-
 .modal-input:focus:not(:read-only) { background: #fff; border-color: #007aff; box-shadow: 0 0 0 4px rgba(0,122,255,0.1); }
 .modal-input:read-only:not(select) { background: transparent; border: none; padding: 12px 0; font-weight: 500; resize: none; }
 .modal-input:disabled { background: transparent; border: none; color: var(--text-main); opacity: 1; padding-left: 0; }
@@ -278,15 +219,26 @@ const handleDownload = () => {
 .fade-enter-active, .fade-leave-active { transition: opacity 0.3s; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
 
-@media (max-width: 1024px) {
-  .prev-btn { left: 20px; } .next-btn { right: 20px; }
-}
+/* === [核心修复] 手机端适配 === */
 @media (max-width: 768px) {
   .modal-card { width: 100% !important; height: 100% !important; border-radius: 0 !important; margin: 0 !important; position: fixed; top: 0; left: 0; }
-  .nav-btn { display: none; }
+  
+  /* [修复] 在手机端显示按钮，并调整位置 */
+  .nav-btn {
+    display: flex; /* 确保显示 */
+    position: fixed;
+    top: auto; bottom: 100px; /* 放在底部，避开 Header */
+    width: 44px; height: 44px;
+    z-index: 1002;
+    background: rgba(0, 122, 255, 0.9);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  }
+  .prev-btn { left: 20px; transform: none; }
+  .next-btn { right: 20px; transform: none; }
+  
   .modal-body { height: calc(100% - 130px); padding: 20px 15px !important; }
   .form-row { flex-direction: column; gap: 16px; }
-  .modal-footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 15px 20px; background: rgba(255,255,255,0.95); border-top: 1px solid rgba(0,0,0,0.05); }
+  .modal-footer { position: absolute; bottom: 0; left: 0; width: 100%; padding: 15px 20px; background: var(--glass-bg); border-top: 1px solid rgba(0,0,0,0.05); z-index: 100; padding-bottom: calc(15px + env(safe-area-inset-bottom)); }
   .btn-primary, .btn-secondary, .btn-danger { padding: 12px 16px !important; font-size: 15px !important; flex: 1; text-align: center; }
 }
 </style>
